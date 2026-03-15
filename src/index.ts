@@ -58,7 +58,12 @@ server.registerTool(
             return text(`Not logged in. Call the 'login' tool first.`);
         }
 
-        await ensureBinary();
+        try {
+            await ensureBinary();
+        } catch (err) {
+            return error(`Failed to install CLI binary: ${err instanceof Error ? err.message : String(err)}`);
+        }
+
         const result = await runCli(parseCommand(command));
 
         const raw = result.ok ? result.stdout : result.stderr || result.stdout;
