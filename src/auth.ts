@@ -16,7 +16,9 @@ type TTokenResponse = {
 };
 
 type TTokenError = {
-    error: 'authorization_pending' | 'slow_down' | 'access_denied' | 'expired_token' | string;
+    error?: string;
+    errorMessage?: string;
+    errorCodes?: string[];
 };
 
 export async function startDeviceFlow(): Promise<TDeviceCodeResponse> {
@@ -55,20 +57,14 @@ export async function pollForToken(
             }),
         });
 
-        if (res.status === 428) {
-            // authorization_pending — keep polling
-            continue;
-        }
-
         if (!res.ok) {
             const err = (await res.json()) as TTokenError;
-            if (err.error === 'slow_down') {
-                pollInterval += 5000;
-                continue;
-            }
-            if (err.error === 'access_denied') return null;
-            if (err.error === 'expired_token') return null;
-            throw new Error(`Token error: ${err.error}`);
+            const code = (err.error ?? err.errorMessage ?? err.errorCodes?.[0] ?? 'unknown').toLowerCase();
+            if (code === 'slow_down') { pollInterval += 5000; continue; }
+            if (code === 'authorization_pending') continue;
+            if (code === 'access_denied') return null;
+            if (code === 'expired_token') return null;
+            throw new Error(`Token error: ${code}`);
         }
 
         const body = (await res.json()) as { data: TTokenResponse };
