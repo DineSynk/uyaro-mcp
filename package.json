@@ -1,0 +1,45 @@
+{
+    "name": "@uyaro/mcp",
+    "version": "0.1.0",
+    "description": "MCP server for the Uyaro POS platform — lets AI agents operate restaurants via Claude",
+    "keywords": [
+        "mcp",
+        "uyaro",
+        "pos",
+        "restaurant",
+        "ai",
+        "claude"
+    ],
+    "homepage": "https://uyaro.com",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/uyaro-tech/uyaro-mcp.git"
+    },
+    "license": "MIT",
+    "type": "module",
+    "main": "dist/index.js",
+    "bin": {
+        "uyaro-mcp": "dist/index.js"
+    },
+    "scripts": {
+        "build": "tsc",
+        "dev": "tsx src/index.ts",
+        "prepublishOnly": "npm run build"
+    },
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.0.0",
+        "zod": "^4.3.6"
+    },
+    "devDependencies": {
+        "@types/node": "^22.0.0",
+        "tsx": "^4.0.0",
+        "typescript": "^5.0.0"
+    },
+    "engines": {
+        "node": ">=20"
+    },
+    "files": [
+        "dist",
+        "README.md"
+    ]
+}
