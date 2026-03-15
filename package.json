@@ -17,14 +17,13 @@
     },
     "license": "MIT",
     "type": "module",
-    "main": "dist/index.js",
+    "main": "index.js",
     "bin": {
-        "uyaro-mcp": "dist/index.js"
+        "uyaro-mcp": "index.js"
     },
     "scripts": {
-        "build": "tsc",
-        "dev": "tsx src/index.ts",
-        "prepublishOnly": "npm run build"
+        "build": "bun build src/index.ts --outfile dist/index.js --target node --format esm --minify && node scripts/prepare-dist.mjs",
+        "dev": "bun src/index.ts"
     },
     "dependencies": {
         "@modelcontextprotocol/sdk": "^1.0.0",
@@ -32,14 +31,9 @@
     },
     "devDependencies": {
         "@types/node": "^22.0.0",
-        "tsx": "^4.0.0",
         "typescript": "^5.0.0"
     },
     "engines": {
         "node": ">=20"
-    },
-    "files": [
-        "dist",
-        "README.md"
-    ]
+    }
 }
