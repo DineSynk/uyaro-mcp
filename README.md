@@ -7,14 +7,14 @@ Operate the [Uyaro](https://uyaro.com) restaurant POS platform from Claude. Crea
 ### Claude Code (recommended)
 
 ```bash
-/plugin marketplace add uyaro-tech/uyaro-mcp
+/plugin marketplace add DineSynk/uyaro-mcp
 /plugin install uyaro@uyaro
 ```
 
 Or via CLI:
 
 ```bash
-claude plugin marketplace add uyaro-tech/uyaro-mcp
+claude plugin marketplace add DineSynk/uyaro-mcp
 claude plugin install uyaro@uyaro
 ```
 
