@@ -19,7 +19,10 @@
   "mcpServers": {
     "uyaro": {
       "command": "npx",
-      "args": ["-y", "@uyaro/mcp"]
+      "args": [
+        "-y",
+        "@uyaro/mcp"
+      ]
     }
   }
 }
