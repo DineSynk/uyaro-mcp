@@ -1,6 +1,6 @@
 # Uyaro — Claude Code Plugin
 
-Operate the [Uyaro](https://uyaro.com) restaurant POS platform from Claude. Create customers, manage orders, check analytics, handle payments, and more — all via natural language.
+Operate the [Uyaro](https://uyaro.in) restaurant POS platform from Claude. Create customers, manage orders, check analytics, handle payments, and more — all via natural language.
 
 ## Install
 
