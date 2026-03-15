@@ -1,0 +1,25 @@
+{
+    "name": "uyaro",
+    "owner": {
+        "name": "Uyaro",
+        "email": "hello@uyaro.com"
+    },
+    "metadata": {
+        "description": "Official Uyaro plugins for Claude Code"
+    },
+    "plugins": [
+        {
+            "name": "uyaro",
+            "source": "./",
+            "description": "Operate the Uyaro POS platform via Claude — create customers, manage orders, check analytics, and more",
+            "version": "0.1.0",
+            "author": {
+                "name": "Uyaro"
+            },
+            "homepage": "https://uyaro.com",
+            "repository": "https://github.com/uyaro-tech/uyaro-mcp",
+            "license": "MIT",
+            "keywords": ["pos", "restaurant", "uyaro", "payments", "orders"]
+        }
+    ]
+}

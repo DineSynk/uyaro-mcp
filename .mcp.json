@@ -1,0 +1,8 @@
+{
+    "mcpServers": {
+        "uyaro": {
+            "command": "npx",
+            "args": ["-y", "@uyaro/mcp"]
+        }
+    }
+}
