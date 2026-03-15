@@ -6,7 +6,7 @@ import { loginWithDeviceFlow } from './auth.js';
 import { checkForUpdate, ensureBinary, isBinaryInstalled, runCli } from './cli.js';
 import { BASE_URL, getAuthHeaders, isLoggedIn, readConfig, writeConfig } from './config.js';
 
-const server = new McpServer({ name: '@uyaro/mcp', version: '0.1.0' });
+const server = new McpServer({ name: '@uyaro/mcp', version: '0.1.1' });
 
 // ── Tools ──────────────────────────────────────────────────────────────────────
 
