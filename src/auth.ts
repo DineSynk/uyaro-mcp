@@ -86,15 +86,19 @@ export async function loginWithDeviceFlow(): Promise<{
     const device = await startDeviceFlow();
 
     // Start background polling — save token when ready
-    pollForToken(device.device_code, device.interval, device.expires_in).then((token) => {
-        if (token) {
-            writeConfig({
-                accessToken: token.access_token,
-                refreshToken: token.refresh_token,
-                expiresAt: Date.now() + token.expires_in * 1000,
-            });
-        }
-    });
+    pollForToken(device.device_code, device.interval, device.expires_in)
+        .then((token) => {
+            if (token) {
+                writeConfig({
+                    accessToken: token.access_token,
+                    refreshToken: token.refresh_token,
+                    expiresAt: Date.now() + token.expires_in * 1000,
+                });
+            }
+        })
+        .catch((err) => {
+            process.stderr.write(`[uyaro] login polling error: ${err instanceof Error ? err.message : String(err)}\n`);
+        });
 
     return {
         verificationUri: device.verification_uri,
