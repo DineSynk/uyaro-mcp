@@ -1,6 +1,6 @@
 {
   "name": "uyaro",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Operate the Uyaro POS platform via Claude — create customers, manage orders, check analytics, and more",
   "author": {
     "name": "Uyaro",

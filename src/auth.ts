@@ -60,12 +60,14 @@ export async function pollForToken(
         if (!res.ok) {
             const err = (await res.json()) as TTokenError;
             const code = (err.error ?? err.errorMessage ?? err.errorCodes?.[0] ?? 'unknown').toLowerCase();
+            process.stderr.write(`[uyaro] poll status=${res.status} code=${code}\n`);
             if (code === 'slow_down') { pollInterval += 5000; continue; }
             if (code === 'authorization_pending') continue;
             if (code === 'access_denied') return null;
             if (code === 'expired_token') return null;
             throw new Error(`Token error: ${code}`);
         }
+        process.stderr.write(`[uyaro] poll succeeded status=${res.status}\n`);
 
         const body = (await res.json()) as { data: TTokenResponse };
         return body.data;
@@ -85,11 +87,15 @@ export async function loginWithDeviceFlow(): Promise<{
     pollForToken(device.device_code, device.interval, device.expires_in)
         .then((token) => {
             if (token) {
+                process.stderr.write(`[uyaro] token received, saving config\n`);
                 writeConfig({
                     accessToken: token.access_token,
                     refreshToken: token.refresh_token,
                     expiresAt: Date.now() + token.expires_in * 1000,
                 });
+                process.stderr.write(`[uyaro] config saved, expiresAt=${new Date(Date.now() + token.expires_in * 1000).toISOString()}\n`);
+            } else {
+                process.stderr.write(`[uyaro] polling returned null (denied or timed out)\n`);
             }
         })
         .catch((err) => {
