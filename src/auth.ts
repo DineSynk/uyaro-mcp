@@ -47,7 +47,7 @@ export async function pollForToken(
     while (Date.now() < deadline) {
         await sleep(pollInterval);
 
-        const res = await fetch(`${BASE_URL}/auth/oauth/device/token`, {
+        const res = await fetch(`${BASE_URL}/auth/oauth/token`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
