@@ -6,7 +6,15 @@ import { loginWithDeviceFlow } from './auth.js';
 import { checkForUpdate, ensureBinary, isBinaryInstalled, runCli } from './cli.js';
 import { BASE_URL, getAuthHeaders, isLoggedIn, readConfig, writeConfig } from './config.js';
 
-const server = new McpServer({ name: '@uyaro/mcp', version: '0.1.1' });
+// Prevent any unhandled error from killing the MCP server process
+process.on('uncaughtException', (err) => {
+    process.stderr.write(`[uyaro] uncaughtException: ${err.message}\n${err.stack}\n`);
+});
+process.on('unhandledRejection', (reason) => {
+    process.stderr.write(`[uyaro] unhandledRejection: ${reason}\n`);
+});
+
+const server = new McpServer({ name: '@uyaro/mcp', version: '0.1.6' });
 
 // ── Tools ──────────────────────────────────────────────────────────────────────
 
