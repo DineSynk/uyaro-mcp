@@ -40,14 +40,18 @@ export async function pollForToken(
     deviceCode: string,
     interval: number,
     expiresIn: number,
+    deps: { fetch: typeof globalThis.fetch; sleep: (ms: number) => Promise<void> } = {
+        fetch: globalThis.fetch,
+        sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+    },
 ): Promise<TTokenResponse | null> {
     const deadline = Date.now() + expiresIn * 1000;
     let pollInterval = interval * 1000;
 
     while (Date.now() < deadline) {
-        await sleep(pollInterval);
+        await deps.sleep(pollInterval);
 
-        const res = await fetch(`${BASE_URL}/auth/oauth/token`, {
+        const res = await deps.fetch(`${BASE_URL}/auth/oauth/token`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -93,7 +97,7 @@ export async function loginWithDeviceFlow(): Promise<{
                     refreshToken: token.refresh_token,
                     expiresAt: Date.now() + token.expires_in * 1000,
                 });
-                process.stderr.write(`[uyaro] config saved, expiresAt=${new Date(Date.now() + token.expires_in * 1000).toISOString()}\n`);
+                process.stderr.write(`[uyaro] config saved\n`);
             } else {
                 process.stderr.write(`[uyaro] polling returned null (denied or timed out)\n`);
             }
@@ -107,8 +111,4 @@ export async function loginWithDeviceFlow(): Promise<{
         userCode: device.user_code,
         verificationUriComplete: device.verification_uri_complete,
     };
-}
-
-function sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
 }
