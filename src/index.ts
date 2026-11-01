@@ -2,19 +2,42 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { loginWithDeviceFlow } from './auth.js';
-import { checkForUpdate, ensureBinary, isBinaryInstalled, runCli } from './cli.js';
-import { BASE_URL, getAuthHeaders, isLoggedIn, readConfig, writeConfig } from './config.js';
+import { isLoginInProgress, loginWithDeviceFlow, refreshSessionIfNeeded } from './auth.js';
+import { executeCommand, listAllCommands } from './api.js';
+import { BASE_URL, getAuthHeaders, isLoggedIn, readConfig } from './config.js';
 
-// Prevent any unhandled error from killing the MCP server process
 process.on('uncaughtException', (err) => {
-    process.stderr.write(`[uyaro] uncaughtException: ${err.message}\n${err.stack}\n`);
+    process.stderr.write(`[uyaro] uncaughtException: ${err.message}\n`);
 });
 process.on('unhandledRejection', (reason) => {
     process.stderr.write(`[uyaro] unhandledRejection: ${reason}\n`);
 });
 
-const server = new McpServer({ name: '@uyaro/mcp', version: '0.1.6' });
+const server = new McpServer({ name: '@uyaro/mcp', version: '0.2.0' });
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function text(t: string) {
+    return { content: [{ type: 'text' as const, text: t }] };
+}
+
+function json(data: unknown) {
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+}
+
+function error(message: string) {
+    return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true };
+}
+
+/** Wait up to `ms` for isLoggedIn() to become true (polls every 1s) */
+async function waitForLogin(ms: number): Promise<boolean> {
+    const deadline = Date.now() + ms;
+    while (Date.now() < deadline) {
+        if (isLoggedIn()) return true;
+        await new Promise((r) => setTimeout(r, 1000));
+    }
+    return isLoggedIn();
+}
 
 // ── Tools ──────────────────────────────────────────────────────────────────────
 
@@ -24,10 +47,10 @@ server.registerTool(
         description:
             'Authenticate with Uyaro POS via browser. Returns a URL and short code — show them to the user ' +
             'and ask them to open the URL and enter the code. The token is saved automatically once login ' +
-            'completes in the browser. Call run_command("auth whoami") after the user confirms to verify.',
+            'completes in the browser. After the user confirms, call run_command("stores list") to verify the session.',
     },
     async () => {
-        if (isLoggedIn()) {
+        if (await refreshSessionIfNeeded()) {
             const config = readConfig();
             return text(
                 `Already logged in. Token expires ${new Date(config.expiresAt!).toLocaleString()}. ` +
@@ -43,7 +66,7 @@ server.registerTool(
                 `   Or go to: ${verificationUri}\n` +
                 `   And enter code: ${userCode}\n\n` +
                 `2. Complete login in the browser.\n\n` +
-                `3. Then call run_command with "auth whoami" to confirm login succeeded.`,
+                `3. Then call run_command with "stores list" to confirm login succeeded.`,
         );
     },
 );
@@ -52,8 +75,11 @@ server.registerTool(
     'run_command',
     {
         description:
-            'Run any Uyaro CLI command. Pass the command exactly as you would to the CLI. ' +
-            'Examples: "customers read --id=<merchantId>", "orders create --merchantId=x --storeId=y --terminalId=z". ' +
+            'Run any Uyaro command (see list_commands; generated from the live API spec, so it is always current). ' +
+            'Path params go positionally or as --name=value; other --name=value flags become the query (GET) or JSON body. ' +
+            'Values are parsed as JSON when possible, so --amount=100, --active=true and --items=\'[...]\' keep their types. ' +
+            'Examples: "customers read --id=<merchantId>", "stores list --merchantId=<id>", ' +
+            '"purchases create --merchantId=x --storeId=y --terminalId=z". ' +
             'Call get_docs first when operating an unfamiliar domain.',
         inputSchema: {
             command: z
@@ -62,24 +88,20 @@ server.registerTool(
         },
     },
     async ({ command }) => {
-        if (!isLoggedIn()) {
+        // If login is in progress, wait up to 30s for the token
+        if (!isLoggedIn() && isLoginInProgress()) {
+            const loggedIn = await waitForLogin(30_000);
+            if (!loggedIn) {
+                return text(`Login is still in progress. Please complete login in your browser first.`);
+            }
+        }
+
+        if (!(await refreshSessionIfNeeded())) {
             return text(`Not logged in. Call the 'login' tool first.`);
         }
 
-        try {
-            await ensureBinary();
-        } catch (err) {
-            return error(`Failed to install CLI binary: ${err instanceof Error ? err.message : String(err)}`);
-        }
-
-        const result = await runCli(parseCommand(command));
-
-        const raw = result.ok ? result.stdout : result.stderr || result.stdout;
-        try {
-            return json(JSON.parse(raw) as unknown);
-        } catch {
-            return result.ok ? text(raw) : error(raw || 'Command failed with no output');
-        }
+        const result = await executeCommand(command);
+        return result.ok ? json(result.data) : error(result.error);
     },
 );
 
@@ -88,7 +110,7 @@ server.registerTool(
     {
         description:
             'Get documentation for a Uyaro domain. Always call this before operating an unfamiliar domain. ' +
-            'Explains concepts, workflows, constraints, and field quirks (e.g. polymorphic IDs). ' +
+            'Explains concepts, workflows, constraints, and field quirks. ' +
             'Omit domain to list all available domains.',
         inputSchema: {
             domain: z
@@ -115,8 +137,9 @@ server.registerTool(
         }
         if (!res.ok) return error(`Failed to fetch docs: ${res.statusText}`);
 
-        const body = (await res.json()) as { data: unknown };
-        return json(body.data);
+        // /cli/docs returns the doc itself, not the usual { status, data } envelope.
+        const body = (await res.json()) as { data?: unknown };
+        return json(body.data ?? body);
     },
 );
 
@@ -125,144 +148,17 @@ server.registerTool(
     {
         description:
             'List all available Uyaro CLI commands grouped by domain, generated from the live API spec. ' +
-            'Use this to discover what operations are available before deciding what to run.',
+            'Use this to discover what operations are available.',
     },
     async () => {
-        const res = await fetch(`${BASE_URL}/api/json`, { headers: getAuthHeaders() });
-        if (!res.ok) return error(`Failed to fetch API spec: ${res.statusText}`);
-
-        type TSpec = {
-            paths: Record<
-                string,
-                Record<string, { tags?: string[]; summary?: string; security?: unknown[] }>
-            >;
-        };
-        const spec = (await res.json()) as TSpec;
-        const grouped: Record<
-            string,
-            Array<{ command: string; summary: string; auth: boolean }>
-        > = {};
-
-        for (const [path, methods] of Object.entries(spec.paths ?? {})) {
-            for (const [method, op] of Object.entries(methods)) {
-                if (!['get', 'post', 'put', 'delete', 'patch'].includes(method)) continue;
-                const cmd = pathToCommand(method, path);
-                const domain = cmd.split(' ')[0] ?? 'other';
-                (grouped[domain] ??= []).push({
-                    command: cmd,
-                    summary: op.summary ?? '',
-                    auth: Array.isArray(op.security) && op.security.length > 0,
-                });
-            }
-        }
-
-        return json(grouped);
+        const result = await listAllCommands();
+        if (result.ok) return json(result.data);
+        return error(result.error);
     },
 );
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-const VERB_LIKE =
-    /^(create|update|delete|list|query|get|read|search|approve|revoke|cancel|sync|export|import|login|signup|logout|refresh|change|register|reopen|extend|reset|verify|activate|deactivate|enable|disable|upload|download|bulk-delete|bulk-create|generate|send|process|complete|void|archive|add|remove|check|apply|redeem)$/;
-
-function pathToCommand(method: string, path: string): string {
-    const segments = path
-        .replace(/^\//, '')
-        .split('/')
-        .filter(Boolean)
-        .map((s) => (s.startsWith(':') ? '' : s))
-        .filter(Boolean);
-
-    const last = segments[segments.length - 1] ?? '';
-    if (VERB_LIKE.test(last)) return segments.join(' ');
-
-    const verb =
-        method === 'get'
-            ? 'list'
-            : method === 'post'
-              ? 'create'
-              : method === 'put'
-                ? 'update'
-                : 'delete';
-
-    return [...segments, verb].join(' ');
-}
-
-function parseCommand(command: string): string[] {
-    const parts: string[] = [];
-    let current = '';
-    let inQuote = false;
-    let quoteChar = '';
-
-    for (const ch of command) {
-        if (inQuote) {
-            if (ch === quoteChar) inQuote = false;
-            else current += ch;
-        } else if (ch === '"' || ch === "'") {
-            inQuote = true;
-            quoteChar = ch;
-        } else if (ch === ' ') {
-            if (current) parts.push(current);
-            current = '';
-        } else {
-            current += ch;
-        }
-    }
-    if (current) parts.push(current);
-    return parts;
-}
-
-function text(t: string) {
-    return { content: [{ type: 'text' as const, text: t }] };
-}
-
-function json(data: unknown) {
-    return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
-}
-
-function error(message: string) {
-    return { content: [{ type: 'text' as const, text: `Error: ${message}` }], isError: true };
-}
-
-// ── Startup: connect first, then update in background ─────────────────────────
+// ── Startup ───────────────────────────────────────────────────────────────────
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
 process.stderr.write('@uyaro/mcp ready\n');
-
-// Background: check for CLI binary update + API spec changes (non-blocking)
-void (async () => {
-    // 1. Check for new CLI binary release on GitHub
-    if (isBinaryInstalled()) await checkForUpdate();
-
-    // 2. Check for API spec changes via /cli/version
-    await checkSpecDiff();
-})();
-
-async function checkSpecDiff(): Promise<void> {
-    try {
-        const config = readConfig();
-        const res = await fetch(`${BASE_URL}/cli/version`, { headers: getAuthHeaders() });
-        if (!res.ok) return;
-
-        const body = (await res.json()) as { data?: { specHash: string; version: string } };
-        const newHash = body.data?.specHash;
-        if (!newHash || newHash === config.specHash) return;
-
-        // Fetch the diff so it's available for agents to query
-        const diffRes = await fetch(`${BASE_URL}/cli/diff`, { headers: getAuthHeaders() });
-        const diff = diffRes.ok
-            ? ((await diffRes.json()) as { data?: unknown }).data
-            : null;
-
-        writeConfig({ specHash: newHash });
-
-        process.stderr.write(
-            `[uyaro] API spec updated to ${body.data?.version ?? newHash.slice(0, 8)}` +
-                (diff ? ` — ${JSON.stringify(diff)}` : '') +
-                '\n',
-        );
-    } catch {
-        // Silent — spec check must not crash the server
-    }
-}

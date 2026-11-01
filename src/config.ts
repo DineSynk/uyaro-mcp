@@ -1,11 +1,9 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { dirname, join } from 'path';
 
 export const BASE_URL = 'https://v2.api.kioskade.com';
-export const GITHUB_REPO = 'DineSynk/uyaro-mcp';
 
-// Shared config — same file the CLI uses + MCP-specific fields
 const CONFIG_PATH = join(homedir(), '.config', 'dinesynk', 'config.json');
 
 export type TConfig = {
@@ -13,8 +11,7 @@ export type TConfig = {
     accessToken?: string;
     refreshToken?: string;
     expiresAt?: number;
-    specHash?: string;
-    cliVersion?: string; // installed CLI binary tag, e.g. "v0.2.0"
+    cliVersion?: string;
 };
 
 export function readConfig(): TConfig {
@@ -29,7 +26,9 @@ export function writeConfig(update: Partial<TConfig>): void {
     const current = readConfig();
     const next = { ...current, ...update };
     mkdirSync(dirname(CONFIG_PATH), { recursive: true });
-    writeFileSync(CONFIG_PATH, JSON.stringify(next, null, 2));
+    // The file holds login tokens: owner-only, and chmod covers files created by older versions.
+    writeFileSync(CONFIG_PATH, JSON.stringify(next, null, 2), { mode: 0o600 });
+    chmodSync(CONFIG_PATH, 0o600);
 }
 
 export function isLoggedIn(): boolean {
@@ -41,10 +40,4 @@ export function getAuthHeaders(): Record<string, string> {
     const config = readConfig();
     if (!config.accessToken) return {};
     return { Authorization: `Bearer ${config.accessToken}` };
-}
-
-export function getBinaryDir(): string {
-    const dir = join(homedir(), '.local', 'share', 'uyaro');
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    return dir;
 }

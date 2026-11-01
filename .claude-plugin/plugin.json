@@ -1,6 +1,6 @@
 {
   "name": "uyaro",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "description": "Operate the Uyaro POS platform via Claude — create customers, manage orders, check analytics, and more",
   "author": {
     "name": "Uyaro",
@@ -21,7 +21,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "@uyaro/mcp"
+        "@uyaro/mcp@0.2.0"
       ]
     }
   }

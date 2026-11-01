@@ -1,4 +1,4 @@
-import { BASE_URL, writeConfig } from './config.js';
+import { BASE_URL, readConfig, writeConfig } from './config.js';
 
 type TDeviceCodeResponse = {
     device_code: string;
@@ -29,7 +29,8 @@ export async function startDeviceFlow(): Promise<TDeviceCodeResponse> {
     });
 
     if (!res.ok) {
-        throw new Error(`Failed to start device flow: ${res.statusText}`);
+        const body = await res.text();
+        throw new Error(`Failed to start device flow: ${res.status} ${body}`);
     }
 
     const body = (await res.json()) as { data: TDeviceCodeResponse };
@@ -64,22 +65,58 @@ export async function pollForToken(
         if (!res.ok) {
             const err = (await res.json()) as TTokenError;
             const code = (err.error ?? err.errorMessage ?? err.errorCodes?.[0] ?? 'unknown').toLowerCase();
-            process.stderr.write(`[uyaro] poll status=${res.status} code=${code}\n`);
             if (code === 'slow_down') { pollInterval += 5000; continue; }
             if (code === 'authorization_pending') continue;
             if (code === 'access_denied') return null;
             if (code === 'expired_token') return null;
             throw new Error(`Token error: ${code}`);
         }
-        process.stderr.write(`[uyaro] poll succeeded status=${res.status}\n`);
 
         const body = (await res.json()) as { data: TTokenResponse };
         return body.data;
     }
 
-    return null; // timed out
+    return null;
 }
 
+/**
+ * Access tokens last an hour. Swap the saved refresh token for a new one so people aren't sent back through
+ * the browser login every hour. Returns false when the session can't be renewed (they must log in again).
+ */
+export async function refreshSessionIfNeeded(
+    deps: { fetch: typeof globalThis.fetch } = { fetch: globalThis.fetch },
+): Promise<boolean> {
+    const config = readConfig();
+    if (config.accessToken && config.expiresAt && config.expiresAt - Date.now() > 60_000) return true;
+    if (!config.refreshToken) return false;
+
+    try {
+        const res = await deps.fetch(`${BASE_URL}/auth/oauth/token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ client_id: 'uyaro-mcp', grant_type: 'refresh_token', refresh_token: config.refreshToken }),
+        });
+        if (!res.ok) return false;
+        const { data } = (await res.json()) as { data: TTokenResponse };
+        writeConfig({
+            accessToken: data.access_token,
+            refreshToken: data.refresh_token,
+            expiresAt: Date.now() + data.expires_in * 1000,
+        });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+// Track whether a login is currently in progress
+let _loginInProgress = false;
+export function isLoginInProgress(): boolean { return _loginInProgress; }
+
+/**
+ * Start device flow, return URL immediately, poll in background.
+ * Token is saved to config automatically when approved.
+ */
 export async function loginWithDeviceFlow(): Promise<{
     verificationUri: string;
     userCode: string;
@@ -87,23 +124,27 @@ export async function loginWithDeviceFlow(): Promise<{
 }> {
     const device = await startDeviceFlow();
 
-    // Start background polling — save token when ready
+    _loginInProgress = true;
+
+    // Background polling — saves token when approved
     pollForToken(device.device_code, device.interval, device.expires_in)
         .then((token) => {
             if (token) {
-                process.stderr.write(`[uyaro] token received, saving config\n`);
                 writeConfig({
                     accessToken: token.access_token,
                     refreshToken: token.refresh_token,
                     expiresAt: Date.now() + token.expires_in * 1000,
                 });
-                process.stderr.write(`[uyaro] config saved\n`);
+                process.stderr.write(`[uyaro] login successful, token saved\n`);
             } else {
-                process.stderr.write(`[uyaro] polling returned null (denied or timed out)\n`);
+                process.stderr.write(`[uyaro] login denied or timed out\n`);
             }
         })
         .catch((err) => {
-            process.stderr.write(`[uyaro] login polling error: ${err instanceof Error ? err.message : String(err)}\n`);
+            process.stderr.write(`[uyaro] login error: ${err instanceof Error ? err.message : String(err)}\n`);
+        })
+        .finally(() => {
+            _loginInProgress = false;
         });
 
     return {
