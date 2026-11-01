@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { tmpdir } from 'os';
-import { pollForToken } from './auth.js';
+import { homedir, tmpdir } from 'os';
+import { pollForToken, refreshSessionIfNeeded } from './auth.js';
+import { readConfig, writeConfig } from './config.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -316,5 +317,43 @@ describe('login → poll → save flow', () => {
 
         // Config should NOT be written
         expect(existsSync(tmpConfigPath)).toBe(false);
+    });
+});
+
+describe('refreshSessionIfNeeded', () => {
+    const CONFIG = join(homedir(), '.config', 'dinesynk', 'config.json');
+    const backup = existsSync(CONFIG) ? readFileSync(CONFIG, 'utf8') : null;
+    afterAll(() => {
+        if (backup !== null) writeFileSync(CONFIG, backup, { mode: 0o600 });
+        else rmSync(CONFIG, { force: true });
+    });
+
+    const tokenFetch = (ok: boolean) =>
+        (async () =>
+            new Response(
+                JSON.stringify({ data: { access_token: 'new', refresh_token: 'new-r', expires_in: 3600 } }),
+                { status: ok ? 200 : 400 },
+            )) as unknown as typeof fetch;
+
+    it('keeps a token with time left without calling the server', async () => {
+        writeConfig({ accessToken: 'a', refreshToken: 'r', expiresAt: Date.now() + 600_000 });
+        const never = (async () => {
+            throw new Error('should not be called');
+        }) as unknown as typeof fetch;
+        expect(await refreshSessionIfNeeded({ fetch: never })).toBe(true);
+    });
+
+    it('swaps an expired token and saves it owner-only', async () => {
+        writeConfig({ accessToken: 'a', refreshToken: 'r', expiresAt: Date.now() - 1000 });
+        expect(await refreshSessionIfNeeded({ fetch: tokenFetch(true) })).toBe(true);
+        expect(readConfig().accessToken).toBe('new');
+        expect(statSync(CONFIG).mode & 0o777).toBe(0o600);
+    });
+
+    it('asks for a new login when the refresh is rejected or missing', async () => {
+        writeConfig({ accessToken: 'a', refreshToken: 'r', expiresAt: Date.now() - 1000 });
+        expect(await refreshSessionIfNeeded({ fetch: tokenFetch(false) })).toBe(false);
+        writeConfig({ accessToken: 'a', refreshToken: undefined, expiresAt: Date.now() - 1000 });
+        expect(await refreshSessionIfNeeded({ fetch: tokenFetch(true) })).toBe(false);
     });
 });
