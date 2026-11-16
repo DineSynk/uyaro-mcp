@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } 
 import { join } from 'path';
 import { homedir, tmpdir } from 'os';
 import { pollForToken, refreshSessionIfNeeded } from './auth.js';
-import { readConfig, writeConfig } from './config.js';
+import { getAuthHeaders, isLoggedIn, readConfig, writeConfig } from './config.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -355,5 +355,46 @@ describe('refreshSessionIfNeeded', () => {
         expect(await refreshSessionIfNeeded({ fetch: tokenFetch(false) })).toBe(false);
         writeConfig({ accessToken: 'a', refreshToken: undefined, expiresAt: Date.now() - 1000 });
         expect(await refreshSessionIfNeeded({ fetch: tokenFetch(true) })).toBe(false);
+    });
+});
+
+describe('a service account key in the environment', () => {
+    const CONFIG = join(homedir(), '.config', 'dinesynk', 'config.json');
+    const backup = existsSync(CONFIG) ? readFileSync(CONFIG, 'utf8') : null;
+    afterEach(() => {
+        delete process.env.UYARO_API_KEY;
+    });
+    afterAll(() => {
+        if (backup !== null) writeFileSync(CONFIG, backup, { mode: 0o600 });
+        else rmSync(CONFIG, { force: true });
+    });
+
+    it('is the credential, ahead of a saved login', () => {
+        writeConfig({ accessToken: 'saved-login', refreshToken: 'saved-refresh', expiresAt: Date.now() + 3_600_000 });
+        expect(getAuthHeaders()).toEqual({ Authorization: 'Bearer saved-login' });
+
+        process.env.UYARO_API_KEY = ' uyr_example ';
+        expect(getAuthHeaders()).toEqual({ Authorization: 'Bearer uyr_example' });
+        expect(isLoggedIn()).toBe(true);
+    });
+
+    it('counts as logged in with no saved login at all, and never refreshes or writes anything', async () => {
+        rmSync(CONFIG, { force: true });
+        expect(isLoggedIn()).toBe(false);
+
+        process.env.UYARO_API_KEY = 'uyr_example';
+        const never = (async () => {
+            throw new Error('should not be called');
+        }) as unknown as typeof fetch;
+        expect(isLoggedIn()).toBe(true);
+        expect(await refreshSessionIfNeeded({ fetch: never })).toBe(true);
+        expect(existsSync(CONFIG)).toBe(false);
+    });
+
+    it('an empty or blank value is ignored', () => {
+        rmSync(CONFIG, { force: true });
+        process.env.UYARO_API_KEY = '   ';
+        expect(getAuthHeaders()).toEqual({});
+        expect(isLoggedIn()).toBe(false);
     });
 });

@@ -41,6 +41,24 @@ After installing, open Claude Code and type `/uyaro`. Claude walks you through:
 2. **Explore** — use `get_docs` to understand any domain before operating it
 3. **Run** — use `run_command` with CLI-style syntax
 
+## Running as an agent, with a scoped key
+
+A merchant owner can issue a service account key that is limited to chosen capabilities and optionally to chosen stores. Give it to the MCP server in the environment and no browser login is needed:
+
+```json
+{
+    "mcpServers": {
+        "uyaro": {
+            "command": "npx",
+            "args": ["-y", "@uyaro/mcp"],
+            "env": { "UYARO_API_KEY": "uyr_..." }
+        }
+    }
+}
+```
+
+The key takes the place of a saved login while it is set. It is read from the environment only, never written to disk, and a command outside what the owner granted is refused by the API.
+
 ## What you can do
 
 ```
