@@ -1,4 +1,4 @@
-import { BASE_URL, readConfig, writeConfig } from './config.js';
+import { apiKey, BASE_URL, readConfig, writeConfig } from './config.js';
 
 type TDeviceCodeResponse = {
     device_code: string;
@@ -86,6 +86,8 @@ export async function pollForToken(
 export async function refreshSessionIfNeeded(
     deps: { fetch: typeof globalThis.fetch } = { fetch: globalThis.fetch },
 ): Promise<boolean> {
+    // A key has no session to refresh, and a saved login must not be touched while a key is in use.
+    if (apiKey()) return true;
     const config = readConfig();
     if (config.accessToken && config.expiresAt && config.expiresAt - Date.now() > 60_000) return true;
     if (!config.refreshToken) return false;

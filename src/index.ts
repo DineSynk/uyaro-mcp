@@ -4,7 +4,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { isLoginInProgress, loginWithDeviceFlow, refreshSessionIfNeeded } from './auth.js';
 import { executeCommand, listAllCommands } from './api.js';
-import { BASE_URL, getAuthHeaders, isLoggedIn, readConfig } from './config.js';
+import { apiKey, BASE_URL, getAuthHeaders, isLoggedIn, readConfig } from './config.js';
 
 process.on('uncaughtException', (err) => {
     process.stderr.write(`[uyaro] uncaughtException: ${err.message}\n`);
@@ -50,6 +50,13 @@ server.registerTool(
             'completes in the browser. After the user confirms, call run_command("stores list") to verify the session.',
     },
     async () => {
+        if (apiKey()) {
+            return text(
+                `Using the key in UYARO_API_KEY, so no login is needed. It can only do what its owner granted; ` +
+                    `a command outside that is refused by the API. Use run_command to operate the Uyaro backend.`,
+            );
+        }
+
         if (await refreshSessionIfNeeded()) {
             const config = readConfig();
             return text(

@@ -31,12 +31,23 @@ export function writeConfig(update: Partial<TConfig>): void {
     chmodSync(CONFIG_PATH, 0o600);
 }
 
+/**
+ * A scoped key the merchant owner issued, taken from the environment. When it is set it is the credential:
+ * no browser login, nothing saved to disk, and it only ever goes to BASE_URL.
+ */
+export function apiKey(): string | undefined {
+    return process.env.UYARO_API_KEY?.trim() || undefined;
+}
+
 export function isLoggedIn(): boolean {
+    if (apiKey()) return true;
     const config = readConfig();
     return !!config.accessToken && !!config.expiresAt && config.expiresAt > Date.now();
 }
 
 export function getAuthHeaders(): Record<string, string> {
+    const key = apiKey();
+    if (key) return { Authorization: `Bearer ${key}` };
     const config = readConfig();
     if (!config.accessToken) return {};
     return { Authorization: `Bearer ${config.accessToken}` };
