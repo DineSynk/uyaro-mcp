@@ -13,7 +13,7 @@ process.on('unhandledRejection', (reason) => {
     process.stderr.write(`[uyaro] unhandledRejection: ${reason}\n`);
 });
 
-const server = new McpServer({ name: '@uyaro/mcp', version: '0.2.0' });
+const server = new McpServer({ name: '@uyaro/mcp', version: '0.2.1' });
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
