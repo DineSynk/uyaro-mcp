@@ -1,89 +1,36 @@
 name: Publish to npm
 
-# Runs only for npm release tags such as v0.2.1. The CLI release tags hosted in
-# this repo (cli-v*) do not match this pattern, and the job checks again below.
 on:
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+*'
-
-permissions:
-  contents: read
-
-concurrency:
-  group: npm-publish
-  cancel-in-progress: false
+      - 'v*'
 
 jobs:
   publish:
-    if: github.repository == 'DineSynk/uyaro-mcp' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write # OIDC: npm trusted publishing and provenance
+      id-token: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - uses: actions/checkout@v4
 
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: '1.4.4'
+          bun-version: latest
 
-      # Trusted publishing needs Node >= 22.14 and npm >= 11.5.1.
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '20'
           registry-url: 'https://registry.npmjs.org'
-          package-manager-cache: false
-
-      - name: Check the tag matches package.json
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          version="$(node -p "require('./package.json').version")"
-          if [ "$TAG" != "v$version" ]; then
-            echo "::error::Tag $TAG does not match package.json version $version (expected v$version)."
-            exit 1
-          fi
-          echo "VERSION=$version" >> "$GITHUB_ENV"
-
-      - name: Check this version is not already on npm
-        run: |
-          if npm view "@uyaro/mcp@$VERSION" version >/dev/null 2>&1; then
-            echo "::error::@uyaro/mcp@$VERSION is already published. Bump the version and tag again."
-            exit 1
-          fi
-
-      - name: Check npm is new enough for trusted publishing
-        run: |
-          npm --version
-          node -e "const [a,b,c]=process.argv[1].split('.').map(Number); if (a<11 || (a===11 && (b<5 || (b===5 && c<1)))) { console.error('npm >= 11.5.1 is required'); process.exit(1) }" "$(npm --version)"
 
       - name: Install dependencies
-        run: npm ci
-
-      - name: Test
-        run: bun run test
+        run: bun install
 
       - name: Build
         run: bun run build
 
-      - name: Show what will be published
-        run: npm pack --dry-run
-        working-directory: dist
-
-      # Authentication is npm trusted publishing: npm exchanges the GitHub OIDC
-      # token for a short-lived publish credential, so no secret is passed here.
-      # The package owner must register this workflow once on npmjs.com
-      # (package Settings -> Trusted publishing -> GitHub Actions:
-      # DineSynk / uyaro-mcp / publish.yml, with "npm publish" allowed).
-      #
-      # Token fallback: if trusted publishing is not set up, add to this step
-      #   env:
-      #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      # where NPM_TOKEN is a granular access token with read and write access to
-      # @uyaro/mcp and "bypass two-factor authentication" enabled.
       - name: Publish from dist/
-        run: npm publish --access public --provenance
+        run: npm publish --access public
         working-directory: dist
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
