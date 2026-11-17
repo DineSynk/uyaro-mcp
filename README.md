@@ -57,8 +57,6 @@ A merchant owner can issue a service account key that is limited to chosen capab
 }
 ```
 
-This needs `@uyaro/mcp` 0.2.1 or later; earlier versions ignore `UYARO_API_KEY`.
-
 The key takes the place of a saved login while it is set. It is read from the environment only, never written to disk, and a command outside what the owner granted is refused by the API.
 
 ## What you can do
@@ -76,7 +74,7 @@ The key takes the place of a saved login while it is set. It is read from the en
 
 | Tool | Description |
 |---|---|
-| `login` | Browser-based OAuth login. Shows URL + code. Token saved automatically. Not needed when `UYARO_API_KEY` is set. |
+| `login` | Browser-based OAuth login. Shows URL + code. Token saved automatically. |
 | `run_command` | Run any CLI command: `"customers read --id=abc"`, `"orders create ..."` |
 | `get_docs` | Domain documentation — concepts, workflows, constraints. Call before operating a new domain. |
 | `list_commands` | All available commands grouped by domain, generated live from the API spec. |
